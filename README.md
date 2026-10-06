@@ -8,8 +8,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Data: ODC-BY 1.0](https://img.shields.io/badge/data-ODC--BY%201.0-lightgrey.svg)](https://physionet.org/content/mitdb/1.0.0/)
 
+**中文版**（本文件） ｜ **English**：[`README.en.md`](README.en.md)
+
 - 🌐 **中英双语界面** —— 界面文案、图表标签、智能体回答、工具描述全部随语言切换
-- 📖 **使用说明**：[`使用说明.md`](使用说明.md)
+- 📖 **使用说明**：[`使用说明.md`](使用说明.md) ｜ [English](USAGE.en.md)
 - 🫀 **上传自己的心电** —— 支持实验设备导出的单列 CSV
 - 🔍 **过程完全透明** —— 每次工具调用的参数与返回的原始 JSON 都可见
 
@@ -18,10 +20,9 @@
 ## 效果预览
 
 <!--
-界面截图放这里。跑起来后截三张，存到 assets/ 目录，然后取消下面的注释：
+界面截图放这里。跑起来后截两张，存到 assets/ 目录，然后取消下面的注释：
 
 ![中文界面](assets/ui-zh.png)
-![English UI](assets/ui-en.png)
 ![对话中的工具调用](assets/tool-calls.png)
 -->
 
