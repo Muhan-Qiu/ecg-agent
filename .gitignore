@@ -1,0 +1,20 @@
+# 上传的心电记录 —— 个人生理数据，绝不入库
+# 界面上的上传功能会把文件写进 data/ 并以此前缀命名，
+# 通配符保证将来任何一次上传都会被自动挡住
+up_*
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# 编辑器与系统
+.DS_Store
+.vscode/
+.idea/
+
+# 凭据 —— 任何情况下都不要提交
+.env
+.streamlit/secrets.toml
