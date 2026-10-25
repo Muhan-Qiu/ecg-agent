@@ -1,0 +1,18 @@
+{
+  "model": "Cardia 2.0",
+  "input_size": 104,
+  "hidden_size": 104,
+  "out_dim": 4,
+  "n_rounds": 4,
+  "mode": "highway_only",
+  "round_src": "h",
+  "first_round": "forward h_f main input; backward h_b[t+1] neighbor; c_f carry",
+  "task": "per-beat 4-class classification (N/SVEB/VEB/F)",
+  "sequence_length": 64,
+  "class_order": [
+    "N",
+    "SVEB",
+    "VEB",
+    "F"
+  ]
+}

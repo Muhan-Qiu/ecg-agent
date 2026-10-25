@@ -1,0 +1,21 @@
+{
+  "torchscript_max_diff": 1.6689300537109375e-06,
+  "onnx_max_diff": 3.814697265625e-06,
+  "input_shape": [
+    1,
+    64,
+    104
+  ],
+  "dt_shape": [
+    1,
+    64
+  ],
+  "output_shape": [
+    1,
+    64,
+    4
+  ],
+  "ts_cpu_trace_max_abs_diff": 0.0,
+  "ts_cpu_reload_max_abs_diff": 0.0,
+  "ts_device": "cpu"
+}

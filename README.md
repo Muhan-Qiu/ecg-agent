@@ -1,157 +1,211 @@
-# 心电图智能体
+# 心电图智能体 · v2.0
 
-**ECG Agent: an LLM agent that reads electrocardiograms — every number traced to a tool call**
+**Cardia 2.0: ECG-specific beat classification with traceable tool calls**
 
-> 一个大模型负责调度、本地工具负责计算的医学智能体：LLM 决定调哪个工具、把结果翻译成临床判读，**所有数值都来自工具返回值，模型不允许自己产生数字**。
+**v2.0 更新**：逐搏分类器由随机森林替换为自研 **Cardia 2.0**；在测试集
+（de Chazal DS2）上的综合评分为 **74.00（满分 100）**。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+Cardia 2.0 是本项目自研的心电逐搏分类模型，基于 104 维心搏特征与 64-beat 序列，
+输出 N / SVEB / VEB / F 四类概率。
+
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Data: ODC-BY 1.0](https://img.shields.io/badge/data-ODC--BY%201.0-lightgrey.svg)](https://physionet.org/content/mitdb/1.0.0/)
 
-**中文版**（本文件） ｜ **English**：[`README.en.md`](README.en.md)
+---
 
-- 🌐 **中英双语界面** —— 界面文案、图表标签、智能体回答、工具描述全部随语言切换
-- 📖 **使用说明**：[`使用说明.md`](使用说明.md) ｜ [English](USAGE.en.md)
-- 🫀 **上传自己的心电** —— 支持实验设备导出的单列 CSV
-- 🔍 **过程完全透明** —— 每次工具调用的参数与返回的原始 JSON 都可见
+## 1. 综合评分（满分 100）
+
+下表为 Cardia 2.0 与 18 个深层神经网络基线在测试集上的综合评分。所有模型使用相同的
+104 维特征与 de Chazal DS1/DS2 划分；基线为 5-seed 均值。
+
+| 模型 | n | 综合评分（满分 100） |
+|---|---:|---:|
+| **Cardia 2.0 (released)** | 1 | **74.00** |
+| T-LSTM | 5 | 70.69 ± 1.59 |
+| Highway LSTM L4 | 5 | 70.38 ± 1.75 |
+| Highway LSTM L2 | 5 | 69.89 ± 1.97 |
+| BiLSTM L4 | 5 | 68.71 ± 0.89 |
+| Highway BiLSTM L2 | 5 | 68.36 ± 2.85 |
+| BiLSTM L2 | 5 | 67.49 ± 1.75 |
+| BiLSTM dense L2 | 5 | 67.34 ± 2.05 |
+| Highway BiLSTM L4 | 5 | 67.03 ± 1.14 |
+| BiLSTM dense L4 | 5 | 66.93 ± 1.23 |
+| BiLSTM resgate L4 | 5 | 66.74 ± 1.27 |
+| BiLSTM resgate L2 | 5 | 65.55 ± 2.42 |
+| BiLSTM (1 layer) | 5 | 65.37 ± 1.01 |
+| InceptionTime | 5 | 64.31 ± 2.72 |
+| BiLSTM residual L2 | 5 | 64.28 ± 0.83 |
+| BiLSTM LN L2 | 5 | 64.24 ± 1.59 |
+| ResNet1D | 5 | 64.14 ± 2.49 |
+| BiLSTM residual L4 | 5 | 63.79 ± 1.15 |
+| BiLSTM LN L4 | 5 | 63.72 ± 1.34 |
+
+### 综合评分方式
+
+**综合评分 = 0.40·Ijk + 0.30·Acc + 0.20·Macro-F1 + 0.10·BalAcc**，满分 100。
+
+其中 Ijk 使用修正后的 AAMI 评测口径（V 类 FP 取 `conf_mat[3][2]`），Acc 为总体准确率，
+Macro-F1 为四类 F1 的算术平均，BalAcc 为四类召回的平均。
+
+> 发布行为单 checkpoint；同配置 5-seed 均值为 **70.02（满分 100）**。
+> 数据见 [`docs/benchmark/score_table.csv`](docs/benchmark/score_table.csv)。
+
+![Score comparison](docs/assets/fig_score_bar.png)
+
+> 全部基线按综合评分排序；Cardia 2.0 为红色。基线为 5-seed 均值，发布行为单 checkpoint。
 
 ---
 
-## 效果预览
+## 2. 评测协议
 
-<!--
-界面截图放这里。跑起来后截两张，存到 assets/ 目录，然后取消下面的注释：
-
-![中文界面](assets/ui-zh.png)
-![对话中的工具调用](assets/tool-calls.png)
--->
-
-程序生成的波形图与 R 波检测：
-
-![波形与 R 波检测](assets/ecg-100.png)
-
----
-
-## 为什么不做成"接个大模型直接问"
-
-把心电图直接丢给多模态大模型问"这是什么心律"，能得到流畅的回答，但你没有理由相信它——它可能把 QRS 说成 T 波，也可能凭空编出一个心率数字，而你无从分辨。
-
-**医学场景里，"看起来对"和"可核查"是两回事。**
-
-这个项目把职责切开：
-
-| 谁 | 负责什么 |
+| 项 | 设置 |
 |---|---|
-| **大模型** | 决定下一步调哪个工具、参数填什么；把工具返回的数值翻译成规范的临床判读；回答追问 |
-| **本地工具** | 全部医学计算：滤波、R 波检测、心率与 HRV、逐搏分类、危急值查询 |
+| 数据 | MIT-BIH Arrhythmia Database |
+| 划分 | de Chazal (2004) inter-patient：DS1 22 条训练，DS2 22 条测试 |
+| 类别 | AAMI 四类：N / SVEB / VEB / F |
+| 输入 | MLII 数字量，360 Hz；两次中值滤波；R 峰 ±20 局部最大；±90 窗 |
+| 特征 | 104 维：RR 8 + u-LBP 59 + Wavelet 23 + HOS 10 + myMorph 4 |
+| 切块 | 每条记录内 64 beat 非重叠 chunk |
+| 选模 | DS1 3-fold 验证集，`Kappa + 0.25·SVEB recall`（3-epoch 平滑） |
+| 测试集 | 只评一次，未用于调参或选模 |
+| 基线 | 同一套 104 维特征、同一划分；5-seed 均值 |
 
-系统提示里写死了三条约束：**所有数值只能来自工具返回值**、发现异常必须查指南原文、结尾必须声明需医生复核。工具报错时模型不会编数据，而是如实报告"该项缺失"。
+---
 
-结果是：每一句结论都能回溯到一次具体的工具调用和它返回的 JSON。
+## 3. 系统架构
 
-## 架构
+![System architecture](docs/assets/fig0_architecture.png)
 
-```
-                        ┌──────────────────────────┐
-   医生提问  ──────────► │  LLM（任意 OpenAI /     │
-                        │  Anthropic 兼容接口）    │
-                        └───────────┬──────────────┘
-                                    │ tool_call
-                        ┌───────────▼──────────────┐
-                        │  主循环（约 50 行）       │
-                        │  执行工具 → 结果塞回上下文 │
-                        └───────────┬──────────────┘
-                                    │
-     ┌──────────────┬───────────────┼───────────────┬──────────────┐
-     ▼              ▼               ▼               ▼              ▼
- list_records  check_quality    measure        classify     lookup_guideline
-                                心率 / 心律     逐搏分类      危急值条目
-                                HRV            随机森林      指南原文
-```
+系统分为数据/模型层与 Agent 层：
 
-**五个工具**就是五个普通 Python 函数。换成别的模型、别的厂商，工具层一行都不用改。
+- **数据/模型层**：原始 ECG 经统一预处理得到 104 维特征，按记录内 64-beat 非重叠 chunk
+  送入 Cardia 2.0，输出每搏四类概率。
+- **Agent 层**：本地工具将分类结果、测量值、质量检查与指南条目组织为 JSON；
+  大模型仅负责选择工具、组织解释，不生成数值。
+- **可追溯性**：所有数值来自工具返回值，每次工具调用的参数与原始 JSON 均可在界面中展开。
 
-## 快速开始
+### 工具
+
+| 工具 | 作用 |
+|---|---|
+| `list_records` | 列出可分析记录 |
+| `check_quality` | 导联脱落、伪差、高频噪声 |
+| `measure` | 心率、心律规整性、HRV |
+| `classify` | 逐搏四类分类；`engine=auto/v2/rf` |
+| `lookup_guideline` | 危急值指南原文 |
+| `model_info` | 模型卡：参数量、综合评分、适用范围 |
+
+---
+
+## 4. 快速开始
 
 ```bash
 git clone https://github.com/Muhan-Qiu/ecg-agent.git
 cd ecg-agent
 pip install -r requirements.txt
 
-streamlit run app.py          # 网页界面
-python3 ecg_agent.py "记录 208 需要立即转诊吗？"    # 命令行
+# 下载 MIT-BIH（默认 data/；数据不提交进 git）
+python scripts/download_mitbih.py
+
+streamlit run app.py
 ```
 
 浏览器打开 `http://localhost:8501`。
 
-**大模型怎么配**：界面右上角 ⚙ 模型 里选厂商、填 API Key，点"应用并测试"当场验证。内置 10 个厂商预设（DeepSeek / OpenAI / Anthropic / Moonshot / 智谱 / 通义 / MiniMax / 本地 Ollama / 自定义）。默认走本机代理，不需要 key。
+**命令行**
 
-> API Key 只保存在会话内存里，不写文件、不进日志、不回显。
-
-## 性能
-
-分类器在 **MIT-BIH 心律失常数据库**上训练，采用 de Chazal (2004) 的**标准 inter-patient 划分**（DS1 22 条训练，DS2 22 条测试）——训练集与测试集来自**不同患者**，这才是真实场景下的性能，不是随机划分刷出来的虚高数字。
-
-**DS2 测试集，48 751 个心搏：**
-
-| 类别 | 精确率 | 召回率 | F1 |
-|---|---|---|---|
-| N 正常搏动 | 0.948 | 0.994 | **0.971** |
-| S 室上性异位 | 0.686 | 0.039 | 0.074 |
-| V 室性异位 | 0.935 | 0.904 | **0.919** |
-| F 融合搏动 | 0.033 | 0.008 | 0.013 |
-| **总体准确率** | | | **94.5%** |
-
-## 已知局限（这一节比上一节更重要）
-
-**S 类召回率只有 3.9%，这是方法的固有短板，不是调参能解决的。**
-
-我做过特征消融实验来确认这一点：
-
-| 使用的特征 | S 召回 | V 召回 | 总体准确率 |
-|---|---|---|---|
-| 仅 RR 间期特征 | 0.070 | 0.755 | 0.918 |
-| 仅波形形态特征 | 0.008 | 0.816 | 0.927 |
-| 全部特征 | 0.039 | 0.904 | 0.945 |
-
-原因是：**室上性异位搏动的 QRS 形态与正常搏动几乎相同**，判别它靠的是 P 波的出现时机（提前出现的异位 P' 波、或 P 波缺如）。而这套特征里只有 RR 间期和 QRS 形态，**没有任何 P 波信息**。文献中该类的召回率也普遍偏低。
-
-F 类（融合搏动）同理，且全库仅 803 个样本，本身就不足以训练。
-
-**其他边界：**
-
-- 模型输出是**算法初筛**，不能直接用于临床，必须经医生复核
-- 上传自己的数据时，若导联与 MIT-BIH 的 MLII 不同（尤其极性相反），分类结果会明显下降；**心率、心律规整性、HRV 不受影响**，它们是时间域的量
-- 运动状态下的记录会因肌电干扰导致 R 波漏检，被误判为"心律不齐"——这是信号质量问题，不是真实心律失常
-- 智能体有 6 步上限，超过会中止并说明
-
-## 数据来源
-
-- **MIT-BIH 心律失常数据库**（44 条记录，103 724 个心搏）
-  PhysioNet: <https://physionet.org/content/mitdb/1.0.0/>
-  许可：Open Data Commons Attribution License v1.0 (ODC-BY 1.0)
-- **指南**：[`guideline.md`](guideline.md) 摘自《心电图危急值 2017 中国专家共识》
-  （中国心电学会危急值专家工作组，《临床心电学杂志》2017 年第 26 卷第 6 期）
-
-界面支持上传实验设备导出的单列 CSV（12 位 ADC 原始计数）。**上传的文件被 `.gitignore` 排除，不会进入版本库。**
-
-## 文件结构
-
-```
-ecg_tools.py         工具集：读取、CSV 导入、质量检查、滤波、R 波检测、测量、分类、指南查询
-ecg_agent.py         智能体本体：工具表 + 工具描述 + 主循环 + 多厂商接入
-app.py               Streamlit 界面（中英双语）
-train_classifier.py  训练心搏分类器
-guideline.md         危急值指南条目
-models/              训练好的分类器
-data/                MIT-BIH 记录
+```bash
+python ecg_agent.py "分析记录 208，是否存在危急情况？"
+python -c "import ecg_tools as T; print(T.classify_beats('208', engine='v2'))"
 ```
 
-## 许可
+**复现基准与图**
 
-代码以 [MIT License](LICENSE) 发布。
-使用的数据遵循其原始许可（MIT-BIH 为 ODC-BY 1.0），再分发时请保留署名。
+```bash
+python scripts/benchmark_ds2.py --v2
+python scripts/make_plots.py
+```
+
+**大模型配置**：界面右上角 ⚙ 模型 中选择厂商、填写 API Key，点击“应用并测试”验证。
+内置 10 个厂商预设（DeepSeek / OpenAI / Anthropic / Moonshot / 智谱 / 通义 / MiniMax /
+本地 Ollama / 自定义）。API Key 仅保存在会话内存中，不写入文件、不进入日志、不回显。
 
 ---
 
-<sub>重庆大学 生物医学工程 · 医学人工智能原理与应用 课程项目</sub>
+## 5. 模型规模与运行时间
+
+| 项 | Cardia 2.0 |
+|---|---:|
+| 参数量 | 809,332 |
+| 权重体积 | ONNX 5.6 MB / TorchScript 3.6 MB |
+| 输入 | 104 维/搏 × 64 搏 |
+| 上下文 | 64-beat 序列 |
+| CPU 推理 | 约 2–4 s / 条 30 分钟记录（TorchScript，已预热） |
+
+> ONNX 图约 2.4 万个节点，ONNX Runtime 首次建立会话在部分 Windows 环境下约需 1 分钟；
+> TorchScript 加载约 2 秒。应用默认优先使用 TorchScript，未安装 PyTorch 时回退 ONNX。
+
+---
+
+## 6. 上传与格式
+
+支持带元数据头的单列 CSV（已使用 Samsung Galaxy Watch 导出验证）：
+
+```text
+名称,示例用户
+采样率,500.000 Hz
+导联,Lead I
+单位,mV
+
+-0.108716
+-0.10939
+...
+```
+
+处理流程：
+
+1. 跳过非数值头，读取采样率、导联与单位元数据；
+2. 重采样至 360 Hz；
+3. 自动检测 R 峰；
+4. 幅度校准至 MIT-BIH 数字量级；
+5. 可选手动反转极性；
+6. 运行 Cardia 2.0，结果标记 `experimental=true`。
+
+> Cardia 2.0 在 MLII、360 Hz 数据上训练；其他导联、采样率与设备增益属于域外输入。
+> 30 秒手表记录通常不足 64 搏，系统会零填充至 64 搏并标记 `padded=true`。
+> 多格式自动接入（WFDB、EDF、SCP-ECG、HL7 aECG、DICOM 等）见
+> [`docs/roadmap.md`](docs/roadmap.md)。
+
+---
+
+## 7. 适用范围与限制
+
+1. 本系统为科研与教学用途，不是医疗器械，不能用于临床诊断、分诊或治疗决策。
+2. 模型仅在 MIT-BIH 单一数据集、de Chazal DS1/DS2 单一划分上评测，尚无外部验证。
+3. 模型在 MLII、360 Hz 数据上训练；更换导联、采样率或设备增益会产生域偏移。
+4. 综合评分为整体指标，不替代逐类临床验证；完整逐类指标与混淆矩阵保存在内部评测记录中。
+
+---
+
+## 8. 数据与许可
+
+- **MIT-BIH Arrhythmia Database**（44 条记录，约 10 万个心搏）
+  PhysioNet: <https://physionet.org/content/mitdb/1.0.0/>
+  许可：Open Data Commons Attribution License v1.0 (ODC-BY 1.0)。
+- **指南**：[`guideline.md`](guideline.md)，摘自《心电图危急值 2017 中国专家共识》。
+- **代码**：GPL-3.0，见 [`LICENSE`](LICENSE)。104 维特征管线的来源与修改说明见
+  [`THIRD_PARTY_NOTICE.md`](THIRD_PARTY_NOTICE.md)。
+
+---
+
+## 9. 引用
+
+如在学术工作中使用本仓库，请引用：
+
+- de Chazal, P., O'Dwyer, M., & Reilly, R. B. (2004). Automatic classification of
+  heartbeats using ECG morphology and heartbeat interval features. IEEE TBME.
+- Mondejar-Guerra, V., et al. (2019). Heartbeat classification using disease-specific
+  feature selection. Computers in Biology and Medicine.
+- Goldberger, A., et al. (2000). PhysioBank, PhysioToolkit, and PhysioNet.
+  Circulation, 101(23), e215–e220.

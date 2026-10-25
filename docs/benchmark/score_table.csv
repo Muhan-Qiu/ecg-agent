@@ -1,0 +1,20 @@
+group,model,n,score,score_std,acc
+Cardia,Cardia 2.0 (released),1,74.0,0.0,94.17
+Baseline,T-LSTM,5,70.69,1.59,90.85
+Baseline,Highway LSTM L4,5,70.38,1.75,92.98
+Baseline,Highway LSTM L2,5,69.89,1.97,91.87
+Baseline,BiLSTM L4,5,68.71,0.89,91.94
+Baseline,Highway BiLSTM L2,5,68.36,2.85,90.23
+Baseline,BiLSTM L2,5,67.49,1.75,89.93
+Baseline,BiLSTM dense L2,5,67.34,2.05,90.16
+Baseline,Highway BiLSTM L4,5,67.03,1.14,91.08
+Baseline,BiLSTM dense L4,5,66.93,1.23,90.28
+Baseline,BiLSTM resgate L4,5,66.74,1.27,90.39
+Baseline,BiLSTM resgate L2,5,65.55,2.42,89.31
+Baseline,BiLSTM (1 layer),5,65.37,1.01,89.44
+Baseline,InceptionTime,5,64.31,2.72,90.37
+Baseline,BiLSTM residual L2,5,64.28,0.83,87.95
+Baseline,BiLSTM LN L2,5,64.24,1.59,89.03
+Baseline,ResNet1D,5,64.14,2.49,89.35
+Baseline,BiLSTM residual L4,5,63.79,1.15,87.72
+Baseline,BiLSTM LN L4,5,63.72,1.34,89.24

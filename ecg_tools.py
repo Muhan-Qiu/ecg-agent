@@ -14,11 +14,16 @@
 """
 import os
 import json
+import re
 
 import numpy as np
 import wfdb
 import neurokit2 as nk
 from scipy.signal import welch, resample
+
+# NumPy < 2.0 兼容：neurokit2 的 hrv_frequency 使用 np.trapezoid
+if not hasattr(np, "trapezoid"):
+    np.trapezoid = np.trapz
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
@@ -57,24 +62,103 @@ def ecg_load(record="100", data_dir=DATA_DIR):
     }
 
 
-def import_csv_ecg(source, fs, record_name, lead_name="CSV"):
-    """把实验设备导出的单列 CSV 转成 WFDB 记录，之后就能当普通记录使用。
+def _read_text_lines(source):
+    """把路径或 file-like 读成文本行。"""
+    if hasattr(source, "read"):
+        text = source.read()
+        if isinstance(text, bytes):
+            text = text.decode("utf-8", errors="replace")
+    else:
+        with open(source, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    return text.splitlines()
 
-    本实验的数据来自 M501，经 ParamMonitor 导出为单列 CSV：12 位 ADC 原始计数，
-    满量程 0~4095，无表头、无时间戳，仪器也未提供增益标定系数。
-    因此幅度不是真实电压，这里按分位数缩放到近似 mV 的量级，
-    目的是让后续的滤波与显示落在合理范围，**不代表真实电压值**。
-    时间轴由采样率决定，是准确的。
 
-    source 可以是文件路径，也可以是已打开的文件对象（如上传的文件）。
+def _parse_csv_meta(lines):
+    """从厂商导出的 key,value 头里尽量读出采样率/导联/单位。"""
+    meta = {}
+    for line in lines:
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 2 and parts[0]:
+            meta[parts[0]] = parts[1]
+    fs = None
+    for key in ("采样率", "采样频率", "sampling rate", "fs"):
+        if key in meta:
+            m = re.search(r"([0-9]+(?:\.[0-9]+)?)", meta[key])
+            if m:
+                fs = float(m.group(1))
+                break
+    lead = meta.get("导联") or meta.get("lead") or meta.get("Lead")
+    unit = meta.get("单位") or meta.get("unit") or meta.get("Unit")
+    return {"fs": fs, "lead": lead, "unit": unit,
+            "device": meta.get("设备") or meta.get("device"),
+            "raw_meta": meta}
+
+
+def _read_numeric_csv(source):
+    """跳过厂商元数据头，读到第一行数值开始解析。
+
+    支持单列/多列；多列时 v2.0 只取第一列（完整多导联适配留给 v2.1）。
     """
-    try:
-        x = np.loadtxt(source, delimiter=",")
-    except Exception:
-        x = np.loadtxt(source)
+    lines = _read_text_lines(source)
+    start = None
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not s:
+            continue
+        first = s.split(",")[0].strip()
+        try:
+            float(first)
+            start = i
+            break
+        except ValueError:
+            continue
+    if start is None:
+        raise ValueError("文件里找不到数值数据行，请确认是心电采样值")
+    rows = []
+    for line in lines[start:]:
+        if not line.strip():
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        try:
+            rows.append([float(p) for p in parts])
+        except ValueError:
+            continue
+    arr = np.asarray(rows, dtype=float)
+    if arr.ndim == 1:
+        arr = arr.reshape(-1, 1)
+    return arr, _parse_csv_meta(lines)
+
+
+def import_csv_ecg(source, fs, record_name, lead_name="CSV"):
+    """把实验设备导出的 CSV 转成 WFDB 记录，之后就能当普通记录使用。
+
+    同时保存一份**原始 ADC 计数** sidecar（`<record>_raw.npy` / `_raw.json`），
+    供 Cardia 2.0 的上传路径使用。V2 的特征管线吃数字量，不能走 mV 缩放后的
+    WFDB 记录（那会二次量化，量纲也对不上）。
+
+    当前 v2.0 只把第一列当作单导联；多列/多厂商自动识别在 v2.1 ingest 层做。
+    """
+    arr, meta = _read_numeric_csv(source)
+    n_cols = int(arr.shape[1])
+    x = arr[:, 0] if n_cols > 0 else arr.ravel()
+    if (not fs or float(fs) <= 0) and meta.get("fs"):
+        fs = meta["fs"]                  # 厂商 CSV 头里有采样率时自动采用
+    fs = float(fs)
     x = np.asarray(x, dtype=float).ravel()
     if x.size < 100:
         raise ValueError("文件内容过少，请确认是单列的心电采样值")
+
+    # ---- 原始 ADC / mV 数值 sidecar（V2 上传路径用）----
+    raw = x.copy()
+    np.save(os.path.join(DATA_DIR, f"{record_name}_raw.npy"), raw)
+    with open(os.path.join(DATA_DIR, f"{record_name}_raw.json"), "w",
+              encoding="utf-8") as f:
+        json.dump({"fs": float(fs), "fs_from_file": meta.get("fs"),
+                   "lead": meta.get("lead") or lead_name, "unit": meta.get("unit"),
+                   "device": meta.get("device"), "source": "csv",
+                   "n_samples": int(raw.size), "n_columns": n_cols,
+                   "column_used": 0}, f, ensure_ascii=False, indent=2)
 
     x = x - np.median(x)                       # 去掉 ADC 直流偏置
     ref = float(np.percentile(np.abs(x), 99.5))
@@ -88,6 +172,12 @@ def import_csv_ecg(source, fs, record_name, lead_name="CSV"):
         "n_samples": int(x.size),
         "fs": float(fs),
         "duration_min": round(x.size / fs / 60, 2),
+        "n_columns": n_cols,
+        "fs_from_file": meta.get("fs"),
+        "lead": meta.get("lead") or lead_name,
+        "unit": meta.get("unit"),
+        "device": meta.get("device"),
+        "raw_sidecar": f"{record_name}_raw.npy",
     }
 
 
@@ -148,11 +238,15 @@ def hrv_metrics(rpeaks, fs):
     try:
         freq = nk.hrv_frequency(rpeaks, sampling_rate=fs, show=False,
                                 normalize=False)
-        out.update({
-            "lf_ms2": round(float(freq["HRV_LF"].iloc[0]), 1),
-            "hf_ms2": round(float(freq["HRV_HF"].iloc[0]), 1),
-            "lf_hf_ratio": round(float(freq["HRV_LFHF"].iloc[0]), 2),
-        })
+        def _finite(x, nd=1):
+            x = float(x)
+            return round(x, nd) if np.isfinite(x) else None
+        lf = _finite(freq["HRV_LF"].iloc[0], 1)
+        hf = _finite(freq["HRV_HF"].iloc[0], 1)
+        ratio = _finite(freq["HRV_LFHF"].iloc[0], 2)
+        out.update({"lf_ms2": lf, "hf_ms2": hf, "lf_hf_ratio": ratio})
+        if lf is None or hf is None or ratio is None:
+            out["freq_note"] = "记录过短，部分频域指标不可用"
     except Exception as e:
         out["freq_error"] = str(e)
     return out
@@ -229,12 +323,20 @@ def _load_model():
         return pickle.load(f)
 
 
-def classify_beats(record="100", data_dir=DATA_DIR):
-    """读入记录、逐搏分类，返回各类心搏的数量与占比。"""
+def classify_beats_rf(record="100", data_dir=DATA_DIR):
+    """v1 随机森林分类器：自动检测 R 峰 + 49 维特征 + RandomForest。"""
     data = ecg_load(record, data_dir)
     clean = preprocess(data["signal"], data["fs"])
     rpeaks = detect_beats(clean, data["fs"])
     X, keep = build_beat_features(clean, rpeaks, data["fs"])
+    if len(X) == 0:
+        return {
+            "record": str(record),
+            "n_beats": 0,
+            "counts": {"N": 0, "S": 0, "V": 0, "F": 0},
+            "abnormal_pct": None,
+            "error": "没有足够的有效心搏用于随机森林分类",
+        }
 
     model = _load_model()
     pred = model.predict(X)
@@ -247,6 +349,59 @@ def classify_beats(record="100", data_dir=DATA_DIR):
         "counts": counts,
         "abnormal_pct": round((total - counts["N"]) / total * 100, 2),
     }
+
+
+def classify_beats_v1(record="100", data_dir=DATA_DIR):
+    """v1 结果补齐成与 v2 一致的字段，方便界面并排比较。"""
+    r = classify_beats_rf(record, data_dir)
+    total = r["n_beats"]
+    r.update({
+        "engine": "rf",
+        "model": "RandomForest",
+        "model_version": "1.0",
+        "n_used": total,
+        "n_chunks": None,
+        "dropped_tail": 0,
+        "mean_confidence": None,
+        "class_mean_prob": None,
+        "annotation_source": "detected",
+        "experimental": False,
+        "lead": "auto",
+        "warnings": ["v1 使用 neurokit2 自动检测 R 峰；分类器为随机森林"],
+        "inference_ms": None,
+    })
+    return r
+
+
+def classify_beats(record="100", data_dir=DATA_DIR, engine="auto", polarity="auto"):
+    """逐搏分类分发。
+
+    engine:
+        "auto" —— 优先 Cardia 2.0；V2 无法运行（如记录太短、无有效心搏）时回退 v1
+        "v2"   —— 只用 Cardia 2.0
+        "v1"   —— 只用 v1 随机森林
+    polarity:
+        仅 V2 上传路径使用，"auto" / "normal" / "inverted"
+    """
+    engine = (engine or "auto").lower()
+    if engine in ("v2", "relay", "auto"):
+        try:
+            import cardia_classifier
+            r = cardia_classifier.classify_record(record, data_dir=data_dir, polarity=polarity)
+        except Exception as e:
+            r = {"record": str(record), "error": f"{type(e).__name__}: {e}"}
+        if "error" not in r:
+            return r
+        if engine in ("v2", "relay"):
+            return r
+        # auto: V2 跑不了，回退 v1，并保留原因
+        v1 = classify_beats_v1(record, data_dir)
+        v1["fallback_from"] = "cardia"
+        v1["cardia_error"] = r.get("error")
+        v1["warnings"].append(f"Cardia 2.0 未运行，已回退随机森林：{r.get('error')}")
+        return v1
+
+    return classify_beats_v1(record, data_dir)
 
 
 def align_labels(data_dir, record, rpeaks, fs, tol=0.05):

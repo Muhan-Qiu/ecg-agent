@@ -172,7 +172,10 @@ SYSTEM_PROMPTS = {
 2. 给出结论前应先检查信号质量；若质量不合格，必须明确说明并建议重新采集。
 3. 若发现异常，必须调用 lookup_guideline 查询危急值条目，并按条目原文给出处置建议。
 4. 输出用中文，先给结论、再给依据，条文清晰，不要写成散文。
-5. 结尾必须提醒：本结果为算法初筛，须经医生复核后方可用于临床。""",
+5. 结尾必须提醒：本结果为算法初筛，须经医生复核后方可用于临床。
+6. 涉及模型名称、参数量、准确率、F1 等性能数字时，必须调用 model_info；
+   不要凭记忆编造，也不要把不同评测口径的数字混在一起说。
+7. 如果 classify 返回 experimental=true 或带 warning，必须在回答中转述该限制。""",
 
     "en": """You are an ECG analysis assistant helping primary-care clinicians read
 electrocardiograms. Rules:
@@ -186,7 +189,10 @@ electrocardiograms. Rules:
 4. Answer in English. Lead with the conclusion, then the evidence. Use clear
    structure, not prose paragraphs.
 5. Always end with: this is an algorithmic pre-screen and must be reviewed by a
-   physician before any clinical use.""",
+   physician before any clinical use.
+6. For model name, parameter count, accuracy, F1 or any performance number, call
+   model_info. Never invent such numbers and never mix different evaluation scopes.
+7. If classify returns experimental=true or a warning, relay that limitation.""",
 }
 
 # 当前语言：由界面或环境变量切换，只影响智能体说什么话，不影响计算结果
@@ -199,6 +205,15 @@ def set_language(lang):
     global LANG, SYSTEM_PROMPT
     LANG = lang if lang in SYSTEM_PROMPTS else "zh"
     SYSTEM_PROMPT = SYSTEM_PROMPTS[LANG]
+
+
+# 当前界面选择的分类模型；classify 工具没显式给 engine 时用它
+CLASSIFY_ENGINE = os.environ.get("ECG_CLASSIFY_ENGINE", "auto")
+
+
+def set_classify_engine(engine):
+    global CLASSIFY_ENGINE
+    CLASSIFY_ENGINE = engine if engine in ("auto", "v2", "rf") else "auto"
 
 
 # ============================================================
@@ -230,8 +245,13 @@ def tool_measure(record: str):
     return m
 
 
-def tool_classify(record: str):
-    return T.classify_beats(record)
+def tool_classify(record: str, engine: str = None):
+    return T.classify_beats(record, engine=engine or CLASSIFY_ENGINE)
+
+
+def tool_model_info():
+    import cardia_classifier
+    return cardia_classifier.model_info()
 
 
 def tool_lookup_guideline(condition: str):
@@ -244,6 +264,7 @@ TOOLS = {
     "measure": tool_measure,
     "classify": tool_classify,
     "lookup_guideline": tool_lookup_guideline,
+    "model_info": tool_model_info,
 }
 
 # 工具描述：这些会交给大模型看，所以也要跟着语言走
@@ -252,15 +273,23 @@ TOOL_DESC = {
         "list_records": "列出当前可分析的心电记录编号。",
         "check_quality": "检查指定记录的信号质量（导联脱落、伪差、高频噪声）。",
         "measure": "测量指定记录的心率、心律规整性与心率变异性指标。",
-        "classify": "对指定记录逐搏分类，统计正常、室上性异位、室性异位、融合搏动各有多少。",
+        "classify": "对指定记录逐搏分类，统计正常、室上性异位、室性异位、融合搏动各有多少。"
+                    "engine=auto 优先使用自研 Cardia 2.0，跑不了时回退随机森林；"
+                    "engine=rf 只用随机森林。",
         "lookup_guideline": "按关键词查询心电图危急值指南条目，关键词如：V、S、室性异位、心动过缓、明显不齐。",
+        "model_info": "返回当前分类模型的名称、参数量、训练/测试数据、DS2 指标和已知限制。"
+                      "性能数字只能来自这个工具，不要凭记忆编造。",
     },
     "en": {
         "list_records": "List the ECG records currently available for analysis.",
         "check_quality": "Check the signal quality of a record (lead detachment, artifact, high-frequency noise).",
         "measure": "Measure heart rate, rhythm regularity and heart-rate variability of a record.",
-        "classify": "Classify every beat of a record; count normal, supraventricular ectopic, ventricular ectopic and fusion beats.",
+        "classify": "Classify every beat of a record; count normal, supraventricular ectopic, ventricular ectopic and fusion beats. "
+                    "engine=auto tries the self-developed Cardia 2.0 first and falls back to the RandomForest; "
+                    "engine=rf uses the RandomForest only.",
         "lookup_guideline": "Look up critical-value guideline entries by keyword, e.g. V, S, ventricular, bradycardia, irregular.",
+        "model_info": "Return the current classifier's name, parameter count, training/evaluation data, DS2 metrics and known limitations. "
+                      "Performance numbers must come from this tool, never from memory.",
     },
 }
 
@@ -273,11 +302,15 @@ SCHEMA = {
                 "properties": {"record": {"type": "string", "description": "记录编号"}},
                 "required": ["record"]},
     "classify": {"type": "object",
-                 "properties": {"record": {"type": "string", "description": "记录编号"}},
+                 "properties": {
+                     "record": {"type": "string", "description": "记录编号"},
+                     "engine": {"type": "string", "enum": ["auto", "v2", "rf"],
+                                "description": "auto=优先 Cardia 2.0，失败回退随机森林；v2=只用 Cardia 2.0；rf=只用随机森林"}},
                  "required": ["record"]},
     "lookup_guideline": {"type": "object",
                          "properties": {"condition": {"type": "string", "description": "查询关键词"}},
                          "required": ["condition"]},
+    "model_info": {"type": "object", "properties": {}},
 }
 
 

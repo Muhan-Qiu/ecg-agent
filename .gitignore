@@ -3,6 +3,16 @@
 # 通配符保证将来任何一次上传都会被自动挡住
 up_*
 
+# MIT-BIH 数据用 scripts/download_mitbih.py 下载，不提交进 git
+data/
+
+# 临时/生成的模型文件
+models/cardia/_*.onnx
+
+# 内部评测明细（公开首页只发布 S2 汇总）
+docs/benchmark/v2_*.json
+docs/benchmark/v2_*.csv
+
 # Python
 __pycache__/
 *.py[cod]

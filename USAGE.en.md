@@ -10,26 +10,29 @@ git clone https://github.com/Muhan-Qiu/ecg-agent.git
 cd ecg-agent
 pip install -r requirements.txt
 
-streamlit run app.py          # web UI (main entry point)
+python -m streamlit run app.py   # web UI (main entry point)
 
-# if you see "command not found: streamlit", use the equivalent form
-python3 -m streamlit run app.py
+# Windows: use `python`; macOS/Linux: use `python3`
 ```
 
 Once the terminal prints `Local URL: http://localhost:8501`, the browser will open
 automatically. Press `Control + C` in the terminal to shut it down.
 
+> On Windows PowerShell, the local project path is
+> `C:\Users\qiumuhan\Documents\claude\心电智能体\v1`.
+> If you see `File does not exist: app.py`, you are not in the project directory.
+
 **Command line** (when you don't want the web UI, or for a terminal demo):
 
 ```bash
-python3 ecg_agent.py "Does record 208 need immediate referral?"
-python3 ecg_agent.py          # no question → interactive mode, type q to quit
+python ecg_agent.py "Does record 208 need immediate referral?"
+python ecg_agent.py          # no question → interactive mode, type q to quit
 ```
 
 **Retraining the classifier** (only if you want to reproduce training; not needed day to day):
 
 ```bash
-python3 train_classifier.py
+python train_classifier.py
 ```
 
 ## 2. Interface tour
