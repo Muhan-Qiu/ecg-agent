@@ -12,7 +12,7 @@
 | 权重 | `models/cardia/cardia_k4_best.onnx`（5.6 MB）<br>`models/cardia/cardia_k4_best_ts.pt`（3.6 MB） |
 | 输入 | 104 维/搏特征，每条记录内 64 beat 非重叠 chunk；`x [B,64,104]`，`dt [B,64]` |
 | 输出 | 每搏四类 logits / softmax：`N / SVEB / VEB / F` |
-| 任务 | AAMI 四类心搏分类 |
+| 任务 | AAMI 四类心搏分类（离线逐搏分类；使用整段 64-beat 的双向上下文，非实时逐拍预测） |
 | 许可 | GPL-3.0（与仓库一致；特征管线来源见 `THIRD_PARTY_NOTICE.md`） |
 
 ## 训练数据

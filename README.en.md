@@ -39,24 +39,22 @@ probabilities: N / SVEB / VEB / F.
 
 ### 3.1 Design rationale (overview)
 
-Existing multi-layer bidirectional recurrent networks (e.g., multi-layer BiLSTM) use
-both forward and backward states at each time step. As depth increases, inter-layer
-information is no longer unidirectional, and the inference-time boundary of "what is
-visible at the current beat" becomes unclear. For beat-by-beat ECG analysis, this
-bidirectional mixing complicates online inference and interpretation. In addition, deep
-recurrent stacks without residual/cross-layer connections tend to attenuate information
-and gradients across layers; simply adding depth increases the parameter count and
-worsens overfitting on small ECG datasets.
+Beat-by-beat ECG classification is an offline classification task, not beat-by-beat
+forecasting; within a recording, using both past and future beat context is legitimate.
+Multi-layer BiLSTM uses bidirectional states to model this context. The real difficulty is
+that multi-layer bidirectional states are mixed layer by layer; deep stacks without
+residual/cross-layer connections attenuate information and gradients, and simply adding
+depth increases parameters and overfitting on small ECG datasets.
 
 ### 3.2 Design goals (overview)
 
-Cardia 2.0 is designed around three goals:
+Cardia 2.0 retains bidirectional context and is designed around three goals:
 
-1. **Causal inference-time information flow**: do not rely on future beats, so the causal
-   boundary of beat-by-beat interpretation remains clear.
-2. **Stable deep sequence modeling**: provide more direct cross-layer information paths
-   for multi-layer state updates, avoiding the attenuation caused by simply stacking
-   layers.
+1. **Retain bidirectional context**: use both past and future beats within the 64-beat
+   record for offline beat classification.
+2. **Improve inter-layer transfer of multi-layer bidirectional states**: provide more
+   direct cross-layer information paths and reduce the attenuation caused by deep
+   stacking.
 3. **Controlled model size and seed variance**: improve the stability of multi-layer
    sequence modeling and minority-class discrimination without significantly increasing
    the parameter count.
