@@ -356,7 +356,7 @@ def classify_beats_v1(record="100", data_dir=DATA_DIR):
     r = classify_beats_rf(record, data_dir)
     total = r["n_beats"]
     r.update({
-        "engine": "rf",
+        "engine": "fallback",
         "model": "RandomForest",
         "model_version": "1.0",
         "n_used": total,

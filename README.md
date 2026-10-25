@@ -1,6 +1,30 @@
-# 心电图智能体 · v2.0
+# 心电图智能体（ECG Agent）· v2.0
 
 **Cardia 2.0: ECG-specific beat classification with traceable tool calls**
+
+**中文**（本文件） ｜ **English**: [`README.en.md`](README.en.md)
+
+---
+
+## 1. 项目简介
+
+心电图智能体是一个将大语言模型与本地心电分析工具结合的开源项目。LLM 负责选择工具、
+组织解释；本地工具负责信号质量检查、R 峰检测、心率与 HRV、逐搏分类和危急值查询。
+所有数值来自工具返回值，可追溯。
+
+当前版本 **v2.0** 使用自研 **Cardia 2.0** 逐搏分类器；**v1.0** 使用随机森林分类器。
+
+## 2. 版本历史
+
+| 版本 | 分类器 | 主要变化 |
+|---|---|---|
+| v1.0 | 随机森林（49 维，逐搏独立） | 初版；5 个本地工具；中英双语界面；上传单列 CSV |
+| v2.0 | Cardia 2.0（104 维，64-beat 序列） | 自研模型；综合评分 74.00/100；模型卡；上传实验路径 |
+
+- V1.0 代码与原始 README：<https://github.com/Muhan-Qiu/ecg-agent/tree/v1.0.0>
+- V1.0 说明摘要：[`docs/v1-legacy.md`](docs/v1-legacy.md)
+
+## 3. v2.0 更新与 Cardia 2.0
 
 **v2.0 更新**：逐搏分类器由随机森林替换为自研 **Cardia 2.0**；在测试集
 （de Chazal DS2）上的综合评分为 **74.00（满分 100）**。
@@ -8,13 +32,7 @@
 Cardia 2.0 是本项目自研的心电逐搏分类模型，基于 104 维心搏特征与 64-beat 序列，
 输出 N / SVEB / VEB / F 四类概率。
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Data: ODC-BY 1.0](https://img.shields.io/badge/data-ODC--BY%201.0-lightgrey.svg)](https://physionet.org/content/mitdb/1.0.0/)
-
----
-
-## 1. 综合评分（满分 100）
+## 4. 综合评分（满分 100）
 
 下表为 Cardia 2.0 与 18 个深层神经网络基线在测试集上的综合评分。所有模型使用相同的
 104 维特征与 de Chazal DS1/DS2 划分；基线为 5-seed 均值。
@@ -55,9 +73,7 @@ Macro-F1 为四类 F1 的算术平均，BalAcc 为四类召回的平均。
 
 > 全部基线按综合评分排序；Cardia 2.0 为红色。基线为 5-seed 均值，发布行为单 checkpoint。
 
----
-
-## 2. 评测协议
+## 5. 评测协议
 
 | 项 | 设置 |
 |---|---|
@@ -71,9 +87,7 @@ Macro-F1 为四类 F1 的算术平均，BalAcc 为四类召回的平均。
 | 测试集 | 只评一次，未用于调参或选模 |
 | 基线 | 同一套 104 维特征、同一划分；5-seed 均值 |
 
----
-
-## 3. 系统架构
+## 6. 系统架构
 
 ![System architecture](docs/assets/fig0_architecture.png)
 
@@ -92,13 +106,11 @@ Macro-F1 为四类 F1 的算术平均，BalAcc 为四类召回的平均。
 | `list_records` | 列出可分析记录 |
 | `check_quality` | 导联脱落、伪差、高频噪声 |
 | `measure` | 心率、心律规整性、HRV |
-| `classify` | 逐搏四类分类；`engine=auto/v2/rf` |
+| `classify` | 逐搏四类分类；`engine=auto/v2/fallback` |
 | `lookup_guideline` | 危急值指南原文 |
 | `model_info` | 模型卡：参数量、综合评分、适用范围 |
 
----
-
-## 4. 快速开始
+## 7. 快速开始
 
 ```bash
 git clone https://github.com/Muhan-Qiu/ecg-agent.git
@@ -131,9 +143,7 @@ python scripts/make_plots.py
 内置 10 个厂商预设（DeepSeek / OpenAI / Anthropic / Moonshot / 智谱 / 通义 / MiniMax /
 本地 Ollama / 自定义）。API Key 仅保存在会话内存中，不写入文件、不进入日志、不回显。
 
----
-
-## 5. 模型规模与运行时间
+## 8. 模型规模与运行时间
 
 | 项 | Cardia 2.0 |
 |---|---:|
@@ -146,9 +156,7 @@ python scripts/make_plots.py
 > ONNX 图约 2.4 万个节点，ONNX Runtime 首次建立会话在部分 Windows 环境下约需 1 分钟；
 > TorchScript 加载约 2 秒。应用默认优先使用 TorchScript，未安装 PyTorch 时回退 ONNX。
 
----
-
-## 6. 上传与格式
+## 9. 上传与格式
 
 支持带元数据头的单列 CSV（已使用 Samsung Galaxy Watch 导出验证）：
 
@@ -177,18 +185,14 @@ python scripts/make_plots.py
 > 多格式自动接入（WFDB、EDF、SCP-ECG、HL7 aECG、DICOM 等）见
 > [`docs/roadmap.md`](docs/roadmap.md)。
 
----
-
-## 7. 适用范围与限制
+## 10. 适用范围与限制
 
 1. 本系统为科研与教学用途，不是医疗器械，不能用于临床诊断、分诊或治疗决策。
 2. 模型仅在 MIT-BIH 单一数据集、de Chazal DS1/DS2 单一划分上评测，尚无外部验证。
 3. 模型在 MLII、360 Hz 数据上训练；更换导联、采样率或设备增益会产生域偏移。
 4. 综合评分为整体指标，不替代逐类临床验证；完整逐类指标与混淆矩阵保存在内部评测记录中。
 
----
-
-## 8. 数据与许可
+## 11. 数据与许可
 
 - **MIT-BIH Arrhythmia Database**（44 条记录，约 10 万个心搏）
   PhysioNet: <https://physionet.org/content/mitdb/1.0.0/>
@@ -197,9 +201,7 @@ python scripts/make_plots.py
 - **代码**：GPL-3.0，见 [`LICENSE`](LICENSE)。104 维特征管线的来源与修改说明见
   [`THIRD_PARTY_NOTICE.md`](THIRD_PARTY_NOTICE.md)。
 
----
-
-## 9. 引用
+## 12. 引用
 
 如在学术工作中使用本仓库，请引用：
 

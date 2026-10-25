@@ -213,7 +213,7 @@ CLASSIFY_ENGINE = os.environ.get("ECG_CLASSIFY_ENGINE", "auto")
 
 def set_classify_engine(engine):
     global CLASSIFY_ENGINE
-    CLASSIFY_ENGINE = engine if engine in ("auto", "v2", "rf") else "auto"
+    CLASSIFY_ENGINE = engine if engine in ("auto", "v2", "fallback", "rf") else "auto"
 
 
 # ============================================================
@@ -275,7 +275,7 @@ TOOL_DESC = {
         "measure": "测量指定记录的心率、心律规整性与心率变异性指标。",
         "classify": "对指定记录逐搏分类，统计正常、室上性异位、室性异位、融合搏动各有多少。"
                     "engine=auto 优先使用自研 Cardia 2.0，跑不了时回退随机森林；"
-                    "engine=rf 只用随机森林。",
+                    "engine=fallback 只用随机森林。",
         "lookup_guideline": "按关键词查询心电图危急值指南条目，关键词如：V、S、室性异位、心动过缓、明显不齐。",
         "model_info": "返回当前分类模型的名称、参数量、训练/测试数据、DS2 指标和已知限制。"
                       "性能数字只能来自这个工具，不要凭记忆编造。",
@@ -286,7 +286,7 @@ TOOL_DESC = {
         "measure": "Measure heart rate, rhythm regularity and heart-rate variability of a record.",
         "classify": "Classify every beat of a record; count normal, supraventricular ectopic, ventricular ectopic and fusion beats. "
                     "engine=auto tries the self-developed Cardia 2.0 first and falls back to the RandomForest; "
-                    "engine=rf uses the RandomForest only.",
+                    "engine=fallback uses the RandomForest only.",
         "lookup_guideline": "Look up critical-value guideline entries by keyword, e.g. V, S, ventricular, bradycardia, irregular.",
         "model_info": "Return the current classifier's name, parameter count, training/evaluation data, DS2 metrics and known limitations. "
                       "Performance numbers must come from this tool, never from memory.",
@@ -304,8 +304,8 @@ SCHEMA = {
     "classify": {"type": "object",
                  "properties": {
                      "record": {"type": "string", "description": "记录编号"},
-                     "engine": {"type": "string", "enum": ["auto", "v2", "rf"],
-                                "description": "auto=优先 Cardia 2.0，失败回退随机森林；v2=只用 Cardia 2.0；rf=只用随机森林"}},
+                     "engine": {"type": "string", "enum": ["auto", "v2", "fallback"],
+                                "description": "auto=优先 Cardia 2.0，失败回退随机森林；v2=只用 Cardia 2.0；fallback=只用随机森林"}},
                  "required": ["record"]},
     "lookup_guideline": {"type": "object",
                          "properties": {"condition": {"type": "string", "description": "查询关键词"}},
