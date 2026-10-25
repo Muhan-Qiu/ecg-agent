@@ -39,14 +39,14 @@ probabilities: N / SVEB / VEB / F.
 
 ### 3.1 Design rationale (overview)
 
-Existing multi-layer bidirectional recurrent networks (e.g., multi-layer BiLSTM)
-propagate both forward and backward states between layers. As depth increases, each layer
-mixes information from both directions, making the inference-time boundary of "what is
-visible at the current beat" unclear. For beat-by-beat ECG analysis, this bidirectional
-mixing complicates online inference and interpretation. In addition, deep recurrent
-stacks without cross-layer shortcuts tend to attenuate information and gradients across
-layers; simply adding depth increases the parameter count and worsens overfitting on
-small ECG datasets.
+Existing multi-layer bidirectional recurrent networks (e.g., multi-layer BiLSTM) use
+both forward and backward states at each time step. As depth increases, inter-layer
+information is no longer unidirectional, and the inference-time boundary of "what is
+visible at the current beat" becomes unclear. For beat-by-beat ECG analysis, this
+bidirectional mixing complicates online inference and interpretation. In addition, deep
+recurrent stacks without residual/cross-layer connections tend to attenuate information
+and gradients across layers; simply adding depth increases the parameter count and
+worsens overfitting on small ECG datasets.
 
 ### 3.2 Design goals (overview)
 
