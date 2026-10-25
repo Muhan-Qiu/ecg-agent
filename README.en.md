@@ -37,6 +37,36 @@ Cardia 2.0 is the ECG-specific beat classifier developed in this project. It tak
 104-dimensional beat features over a 64-beat sequence and outputs four-class
 probabilities: N / SVEB / VEB / F.
 
+### 3.1 Design rationale (overview)
+
+Existing multi-layer bidirectional recurrent networks (e.g., multi-layer BiLSTM)
+propagate both forward and backward states between layers. As depth increases, each layer
+mixes information from both directions, making the inference-time boundary of "what is
+visible at the current beat" unclear. For beat-by-beat ECG analysis, this bidirectional
+mixing complicates online inference and interpretation. In addition, deep recurrent
+stacks without cross-layer shortcuts tend to attenuate information and gradients across
+layers; simply adding depth increases the parameter count and worsens overfitting on
+small ECG datasets.
+
+### 3.2 Design goals (overview)
+
+Cardia 2.0 is designed around three goals:
+
+1. **Causal inference-time information flow**: do not rely on future beats, so the causal
+   boundary of beat-by-beat interpretation remains clear.
+2. **Stable deep sequence modeling**: provide more direct cross-layer information paths
+   for multi-layer state updates, avoiding the attenuation caused by simply stacking
+   layers.
+3. **Controlled model size and seed variance**: improve the stability of multi-layer
+   sequence modeling and minority-class discrimination without significantly increasing
+   the parameter count.
+
+> This section describes the motivation and goals only. The specific inter-layer
+> connections, gating forms, state-update rules, training strategy, checkpoint-selection
+> criteria and feature/model co-design are not disclosed in public materials. Public
+> weights are released as ONNX / TorchScript; the preprocessing contract is in
+> `models/cardia/preprocess.json`.
+
 ## 4. Composite score (out of 100)
 
 The table compares Cardia 2.0 with 18 deep-neural baselines on the test set. All models

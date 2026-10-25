@@ -7,7 +7,7 @@
 | 名称 | **Cardia 2.0**（心电专用模型） |
 | 版本 | 2.0 |
 | 类型 | 逐搏四类心电分类器（ECG-specific sequence model） |
-| 结构 | 4 轮序列更新（`K=4`，`mode=highway_only`，`round_src=h`），hidden=104 |
+| 结构 | 自研多层序列模型（具体层间连接与门控不公开） |
 | 参数量 | 809,332 |
 | 权重 | `models/cardia/cardia_k4_best.onnx`（5.6 MB）<br>`models/cardia/cardia_k4_best_ts.pt`（3.6 MB） |
 | 输入 | 104 维/搏特征，每条记录内 64 beat 非重叠 chunk；`x [B,64,104]`，`dt [B,64]` |
